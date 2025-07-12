@@ -196,6 +196,7 @@ jobs:
       - name: 📝 Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
+          token: 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
           draft: true
           name: "Release v${{ steps.build-info.outputs.version }}-${{ steps.build-info.outputs.build_number }}"
           tag_name: "v${{ steps.build-info.outputs.version }}-${{ steps.build-info.outputs.build_number }}"
@@ -203,7 +204,7 @@ jobs:
             ./app-dev.apk
           body_path: changelog.md
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: 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
       - name: 📦 Upload build artifacts to GitHub
         uses: actions/upload-artifact@v4
         with:
