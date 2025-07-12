@@ -20,7 +20,7 @@ on:
           - all
 
 env:
-  EXPO_TOKEN: tOhql9e4RRLGdDKJ0_lpxbz7p1q4EEfqxZuyTLlx
+  EXPO_TOKEN: 43GxaWFjsZ0cR0EnBgaXViEjvN4OCna3AOjhi2Ap
   NODE_OPTIONS: --openssl-legacy-provider
 
 jobs:
