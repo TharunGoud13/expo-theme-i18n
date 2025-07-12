@@ -1,21 +1,22 @@
-name: Quick GitHub Release Test
+name: Test GitHub Release on Push
 
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - main
 
 jobs:
   test-release:
     runs-on: ubuntu-latest
     steps:
-      - name: 📝 Create fake file
-        run: |
-          echo "test" > dummy.apk
+      - name: 📝 Create dummy file
+        run: echo "this is a dummy apk file" > dummy.apk
 
-      - name: 📝 Test GitHub Release
+      - name: 📝 Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
           token: ${{ secrets.MY_GITHUB_TOKEN }}
           draft: true
           name: "Test Release"
-          tag_name: "test-release"
+          tag_name: "test-release-${{ github.run_number }}"
           files: ./dummy.apk
