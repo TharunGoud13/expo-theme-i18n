@@ -6,7 +6,6 @@ import { StatusBar, View } from "react-native";
 import { ThemeToggle } from "~/components/ThemeToggle";
 import { ThemeProvider, useAppTheme } from "~/components/themes/useTheme";
 import Language from "~/components/Language";
-// import { KeyboardProvider } from "react-native-keyboard-controller";
 
 export default function RootLayout() {
   return (
