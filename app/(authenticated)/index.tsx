@@ -9,12 +9,17 @@ import { useTranslation } from "react-i18next";
 import { Separator } from "~/components/ui/separator";
 import i18n from "../../i18n";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { router } from "expo-router";
+import { router, useNavigation } from "expo-router";
+
+type Nav = {
+  navigate: (value: string) => void;
+};
 
 export default function Screen() {
   const { t } = useTranslation();
   const [text, setText] = React.useState("Hello World, Welcome to Amoga Apps");
   const current = i18n.language;
+  const { navigate } = useNavigation<Nav>();
 
   // const translateText = async () => {
   //   try {
@@ -73,6 +78,12 @@ export default function Screen() {
             />
             <Text>{text}</Text>
             <Button title="Translate" onPress={() => handleTranslate(text)} />
+          </Card>
+          <Card className="w-full gap-2.5 p-6 max-w-sm">
+            <Text>Chat Page</Text>
+            <Separator />
+
+            <Button title="Go to Chat Page" onPress={() => navigate("inbox")} />
           </Card>
         </View>
         <Button
