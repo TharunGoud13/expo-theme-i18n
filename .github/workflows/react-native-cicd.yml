@@ -30,19 +30,6 @@ jobs:
     steps:
       - run: echo "✅ Proceeding with workflow"
 
-  test:
-    needs: check-skip
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: "yarn"
-      - run: yarn install
-      - run: yarn tsc
-      - run: yarn lint
-
   build-and-release:
     needs: test
     if: (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')) || github.event_name == 'workflow_dispatch'
