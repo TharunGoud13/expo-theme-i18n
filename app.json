@@ -38,7 +38,8 @@
     },
     "plugins": [
       "expo-router",
-      "expo-localization"
+      "expo-localization",
+      "expo-build-properties"
     ],
     "experiments": {
       "typedRoutes": true
@@ -48,6 +49,7 @@
       "eas": {
         "projectId": "8be6d595-744a-4c7d-a9db-b03171f685f6"
       }
-    }
+    },
+    "owner":"tharungoud"
   }
 }
