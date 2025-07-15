@@ -1,0 +1,38 @@
+# Node modules (reinstalled on EAS build)
+node_modules
+
+# Build cache
+*.log
+.expo
+.expo-shared
+dist
+build
+web-build
+ios/build
+android/build
+
+# Source control
+.git
+.gitignore
+.env
+.env.*
+*.env.local
+*.env.development
+*.env.production
+
+# IDE files
+.vscode
+.idea
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test files
+__tests__/
+coverage/
+jest.config.js
+
+# Storybook or Dev Tools (if unused)
+.storybook/
+.storybook-static/

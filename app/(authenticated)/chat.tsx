@@ -15,7 +15,6 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { COLORS } from "../../lib/colors";
 import icons from "../../lib/icons";
-import images from "../../lib/images";
 // import { GiftedChat, Bubble } from 'react-native-gifted-chat';
 import { NavigationProp } from "@react-navigation/native";
 import { useNavigation } from "expo-router";
@@ -29,150 +28,148 @@ import {
   ThumbsDown,
   ThumbsUp,
 } from "lucide-react-native";
+import db from "~/database";
+import { Q } from "@nozbe/watermelondb";
+import * as Network from "expo-network";
+import { adapter } from "~/database";
 
 // Inbox Chat
 const Chat = () => {
   const navigation = useNavigation<NavigationProp<any>>();
   const [messages, setMessages] = useState<any>([]);
   const [inputMessage, setInputMessage] = useState("");
+  const [status, setStatus] = useState("");
   const { theme } = useAppTheme();
 
   const handleInputText = (text: any) => {
     setInputMessage(text);
   };
 
-  const renderMessage = (props: any) => {
-    const { currentMessage } = props;
-
-    if (currentMessage.user._id === 1) {
-      return (
-        <View
-          style={{
-            flex: 1,
-            flexDirection: "row",
-            justifyContent: "flex-end",
-          }}
-        >
-          {/* <Bubble
-                        {...props}
-                        wrapperStyle={{
-                            right: {
-                                backgroundColor: COLORS.primary,
-                                marginRight: 12,
-                                marginVertical: 12,
-                            },
-                        }}
-                        textStyle={{
-                            right: {
-                                color: COLORS.white, // Change the text color for the sender here
-                            },
-                        }}
-                    /> */}
-        </View>
-      );
-    } else {
-      return (
-        <View
-          style={{
-            flex: 1,
-            flexDirection: "row",
-            justifyContent: "flex-start",
-          }}
-        >
-          <Image
-            source={images.user1}
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: 20,
-              marginLeft: 8,
-            }}
-          />
-          {/* <Bubble
-                        {...props}
-                        wrapperStyle={{
-                            left: {
-                                backgroundColor: COLORS.secondary,
-                                marginLeft: 12,
-                            },
-                        }}
-                        textStyle={{
-                            left: {
-                                color: COLORS.white, // Change the text color for the sender here
-                            },
-                        }}
-                    /> */}
-        </View>
-      );
-    }
-  };
-
-  /***
-   * Implementing chat functionnality
-   */
-  const submitHandler = () => {
-    const message = {
-      _id: Math.random().toString(36).substring(7),
-      text: inputMessage,
-      createdAt: new Date(),
-      user: { _id: 1 },
+  useEffect(() => {
+    const onlineStatus = async () => {
+      const status = await Network.getNetworkStateAsync();
+      if (status.isConnected) {
+        setStatus("Online");
+        Alert.alert("Connected to Internet");
+      } else {
+        setStatus("Offline");
+        Alert.alert("No Internet Connection");
+      }
     };
-    // setMessages((previousMessage: any) =>
-    //     GiftedChat.append(previousMessage, [message])
-    // );
+    onlineStatus();
+  }, []);
 
-    setInputMessage("");
-  };
+  console.log(status);
 
-  const renderInputToolbar = () => {
-    return null;
-  };
+  // get messages from watermelon db in realtime
+  useEffect(() => {
+    const messageCollection = db.get("message");
+    const observable = messageCollection
+      .query(Q.where("room_id", 100))
+      .observe();
+    const subscribe = observable.subscribe((record) => {
+      const localMessages = record.map((m: any) => ({
+        id: m.id,
+        content: m.content,
+        createdAt: m.createdAt,
+      }));
+      console.log("local-----", localMessages);
+      setMessages(localMessages);
+    });
+    return () => subscribe.unsubscribe();
+  }, []);
 
+  //submit fn, save the message to watermelon and supabase db
   const handleSubmit = async () => {
     if (!inputMessage) return;
 
-    const { error } = await supabaseClient.from("message").insert({
-      content: inputMessage,
-      user_id: 100,
-      soc_room_id: 100,
-      createdAt: new Date(),
-    });
+    console.log("Saving to watermelon......");
 
-    if (error) {
-      console.error("❌ Failed to send message", error);
-      Alert.alert("Error", "Could not send message");
-    } else {
+    try {
+      // first save to watermelon
+      await db.write(async () => {
+        const messagesCollection = db.get("message");
+        await messagesCollection.create((msg: any) => {
+          msg.content = inputMessage;
+          msg.userId = 100;
+          msg.roomId = 100;
+          msg.createdAt = Date.now();
+          msg.isSynced = false;
+        });
+      });
       setInputMessage("");
-      // No need to update `messages` manually — Realtime will do it
+
+      console.log("Checking network status......");
+
+      const net = await Network.getNetworkStateAsync();
+      // if user is online only then save to supabase
+      if (net.isConnected) {
+        await syncPendingMessagesToSupabase();
+      }
+    } catch (error) {
+      console.log("❌Error------", error);
     }
   };
 
-  useEffect(() => {
-    const fetchMessages = async () => {
-      const { data, error } = await supabaseClient
-        .from("message")
-        .select("*")
-        .eq("user_id", 100);
+  // Sync all unsynced messages to Supabase
+  const syncPendingMessagesToSupabase = async () => {
+    const messagesCollection = db.get("message");
+    const pendingMessages = await messagesCollection
+      .query(Q.where("is_synced", false))
+      .fetch();
+
+    for (const msg of pendingMessages) {
+      const { content, userId, room_id, createdAt } = msg;
+      const { error } = await supabaseClient.from("message").insert({
+        content,
+        user_id: userId,
+        soc_room_id: room_id,
+        createdAt: new Date(createdAt),
+      });
 
       if (!error) {
-        setMessages(data);
+        await db.write(async () => {
+          await msg.update((m: any) => {
+            m.isSynced = true;
+          });
+        });
       }
-    };
+    }
+  };
 
-    fetchMessages();
-
+  // Realtime socket sync from Supabase to WatermelonDB
+  useEffect(() => {
     const channel = supabaseClient
-      .channel(`room:100`)
+      .channel("room:100")
       .on(
         "postgres_changes",
         {
           event: "INSERT",
           schema: "public",
           table: "message",
-          filter: "soc_room_id=eq.100", // optional
+          filter: "soc_room_id=eq.100",
         },
-        (payload) => {
-          setMessages((prev) => [...prev, payload.new]);
+        async (payload) => {
+          const { content, user_id, soc_room_id, createdAt } = payload.new;
+          await db.write(async () => {
+            const messagesCollection = db.get("message");
+            const exists = await messagesCollection
+              .query(
+                Q.where("content", content),
+                Q.where("created_at", new Date(createdAt).getTime())
+              )
+              .fetch();
+
+            if (exists.length === 0) {
+              await messagesCollection.create((msg: any) => {
+                msg.content = content;
+                msg.userId = user_id;
+                msg.roomId = soc_room_id;
+                msg.createdAt = new Date(createdAt).getTime();
+                msg.isSynced = true;
+              });
+            }
+          });
         }
       )
       .subscribe();
@@ -182,101 +179,41 @@ const Chat = () => {
     };
   }, []);
 
+  // useEffect(() => {
+  //   (async () => {
+  //     await adapter.unsafeResetDatabase(() => {});
+  //     console.log("✅ DB reset successfully.");
+  //   })();
+  // }, []);
+
+  useEffect(() => {
+    console.log("🔄 Messages updated:", messages);
+  }, [messages]);
+
   return (
-    <SafeAreaView
-      className="flex-1"
-      style={[
-        styles.container,
-        {
-          backgroundColor: theme,
-        },
-      ]}
-    >
-      <KeyboardAvoidingView className="flex-1" behavior="padding">
+    <SafeAreaView className="flex-1">
+      <KeyboardAvoidingView
+        className="flex-1"
+        behavior="padding"
+        keyboardVerticalOffset={0}
+      >
         <ScrollView
           className="flex-1"
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ flexGrow: 1, paddingBottom: 20 }}
         >
           <StatusBar hidden={true} />
-          <View style={[styles.contentContainer, { backgroundColor: theme }]}>
-            <View
-              style={[
-                styles.header,
-                {
-                  backgroundColor: theme,
-                },
-              ]}
-            >
-              <View style={{ flexDirection: "row", alignItems: "center" }}>
-                <TouchableOpacity onPress={() => navigation.goBack()}>
-                  <Image
-                    source={icons.arrowLeft}
-                    resizeMode="contain"
-                    style={[
-                      styles.headerIcon,
-                      {
-                        tintColor: theme,
-                      },
-                    ]}
-                  />
-                </TouchableOpacity>
-                <Text
-                  style={[
-                    styles.headerTitle,
-                    {
-                      color: theme,
-                    },
-                  ]}
-                >
-                  Jenny Wilona
-                </Text>
-              </View>
-              <View style={{ flexDirection: "row", alignItems: "center" }}>
-                <TouchableOpacity
-                  onPress={() => navigation.navigate("videocall")}
-                >
-                  <Image
-                    source={icons.videoCameraOutline}
-                    resizeMode="contain"
-                    style={[
-                      styles.headerIcon,
-                      {
-                        tintColor: theme,
-                      },
-                    ]}
-                  />
-                </TouchableOpacity>
-                <TouchableOpacity style={{ marginLeft: 16 }}>
-                  <Image
-                    source={icons.moreCircle}
-                    resizeMode="contain"
-                    style={[
-                      styles.headerIcon,
-                      {
-                        tintColor: theme,
-                      },
-                    ]}
-                  />
-                </TouchableOpacity>
-              </View>
-            </View>
+
+          <View className="flex-1" style={[{ backgroundColor: theme }]}>
             <View className="flex-1 gap-2.5 h-full">
-              {/* <GiftedChat
-                        messages={messages}
-                        renderInputToolbar={renderInputToolbar}
-                        user={{ _id: 1 }}
-                        minInputToolbarHeight={0}
-                        renderMessage={renderMessage}
-                    /> */}
               {messages &&
                 messages?.length > 0 &&
                 messages.map((item, index) => (
                   <View
-                    key={item.agentMsgId}
+                    key={item.id}
                     className="bg-gray-200  p-2.5 rounded-md mx-2"
                   >
-                    <Text>{item.createdAt}</Text>
+                    <Text>{new Date(item.createdAt).toLocaleString()}</Text>
                     <Text>{item.content}</Text>
                     <View className="flex-row gap-2.5 items-center">
                       <Star size={18} />
@@ -289,6 +226,8 @@ const Chat = () => {
                   </View>
                 ))}
             </View>
+            <Button title="Sync" onPress={syncPendingMessagesToSupabase} />
+
             <View
               className="flex-row gap-2.5 items-center"
               style={[
@@ -315,22 +254,7 @@ const Chat = () => {
                   placeholder="Enter your message..."
                 />
                 <Button title="Send" onPress={handleSubmit} />
-                {/* <View style={styles.attachmentIconContainer}>
-              <TouchableOpacity>
-                <Feather name="image" size={24} color={COLORS.gray} />
-              </TouchableOpacity>
-            </View> */}
               </View>
-              {/* <TouchableOpacity
-            style={[
-              styles.microContainer,
-              {
-                backgroundColor: theme,
-              },
-            ]}
-          >
-            <MaterialCommunityIcons name="microphone" size={24} color={theme} />
-          </TouchableOpacity> */}
             </View>
           </View>
         </ScrollView>

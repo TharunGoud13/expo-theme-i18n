@@ -139,7 +139,7 @@ const Chats: React.FC = () => {
       <FlatList
         className="bg-background"
         data={messsagesData}
-        showsVerticalScrollIndicator={false}
+        showsVerticalScrollIndicator={true}
         renderItem={renderItem}
         keyExtractor={(item) => item.id.toString()}
       />
